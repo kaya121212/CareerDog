@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>CareerDog Autofill</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: system-ui, sans-serif; width: 280px; padding: 16px; background: #fff; }
+    h2 { font-size: 14px; font-weight: 600; margin-bottom: 12px; color: #111; }
+    label { display: block; font-size: 11px; color: #555; margin-top: 10px; margin-bottom: 3px; }
+    input { width: 100%; padding: 6px 8px; border: 1px solid #ddd; border-radius: 6px; font-size: 13px; outline: none; }
+    input:focus { border-color: #4f46e5; }
+    .row { display: flex; gap: 8px; }
+    .row input { flex: 1; }
+    .actions { display: flex; gap: 8px; margin-top: 14px; }
+    button { flex: 1; padding: 7px; border: none; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    #saveBtn { background: #4f46e5; color: #fff; }
+    #saveBtn:hover { background: #4338ca; }
+    #fillBtn { background: #f3f4f6; color: #111; }
+    #fillBtn:hover { background: #e5e7eb; }
+    #status { margin-top: 8px; font-size: 11px; color: #16a34a; text-align: center; min-height: 14px; }
+  </style>
+</head>
+<body>
+  <h2>CareerDog Autofill</h2>
+
+  <div class="row">
+    <div>
+      <label for="firstName">First name</label>
+      <input id="firstName" type="text" placeholder="Jane" />
+    </div>
+    <div>
+      <label for="lastName">Last name</label>
+      <input id="lastName" type="text" placeholder="Doe" />
+    </div>
+  </div>
+
+  <label for="email">Email</label>
+  <input id="email" type="email" placeholder="jane@example.com" />
+
+  <label for="phone">Phone</label>
+  <input id="phone" type="tel" placeholder="+1 555 000 0000" />
+
+  <label for="linkedin">LinkedIn URL</label>
+  <input id="linkedin" type="url" placeholder="https://linkedin.com/in/janedoe" />
+
+  <label for="location">Location</label>
+  <input id="location" type="text" placeholder="New York, NY" />
+
+  <div class="actions">
+    <button id="saveBtn">Save</button>
+    <button id="fillBtn">Fill page</button>
+  </div>
+  <div id="status"></div>
+
+  <script src="popup.js"></script>
+</body>
+</html>
