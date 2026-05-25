@@ -1,3 +1,6 @@
+if (window.__careerDogLoaded) return;
+window.__careerDogLoaded = true;
+
 // Heuristic patterns for common field names
 const MATCHERS = [
   {
