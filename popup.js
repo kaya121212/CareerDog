@@ -2,7 +2,7 @@
 // CareerDog – popup.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location', 'zipCode'];
+const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location', 'zipCode', 'address'];
 
 // ── Utility ───────────────────────────────────────────────────────────────────
 
@@ -195,8 +195,9 @@ function fillPageWithData(userData) {
     { keys: ['email', 'e-mail', 'email_address', 'emailaddress'], dataKey: 'email' },
     { keys: ['phone', 'telephone', 'tel', 'mobile', 'cell', 'phone_number', 'phonenumber'], dataKey: 'phone' },
     { keys: ['linkedin', 'linkedin_url', 'linkedinurl', 'linkedin_profile', 'linkedin-url'], dataKey: 'linkedin' },
-    { keys: ['location', 'city', 'citystate', 'city_state', 'address', 'current_location', 'region'], dataKey: 'location' },
+    { keys: ['location', 'city', 'citystate', 'city_state', 'current_location', 'region'], dataKey: 'location' },
     { keys: ['zip', 'zipcode', 'zip_code', 'postal', 'postalcode', 'postal_code'], dataKey: 'zipCode' },
+    { keys: ['address', 'street', 'street_address', 'streetaddress', 'addr'], dataKey: 'address' },
   ];
 
   function norm(str) {
@@ -232,13 +233,64 @@ function fillPageWithData(userData) {
     return matcher.keys.some(k => candidates.some(c => c.includes(norm(k))));
   }
 
+  /**
+   * Returns true if the input is the number-only field inside a phone-library
+   * widget (react-tel-input, react-international-phone, intl-tel-input, etc.)
+   * that already shows a country-code selector/flag.
+   */
+  function isPhoneLibraryInput(input) {
+    const container = input.closest(
+      '.react-tel-input, .react-international-phone, .intl-tel-input, ' +
+      '[class*="PhoneInput"], [class*="phone-input"], [class*="phoneInput"]'
+    );
+    if (container) return true;
+    // Look for a sibling/nearby flag or country selector
+    const parent = input.parentElement;
+    if (parent) {
+      const hasFlagSibling = parent.querySelector(
+        '.flag-dropdown, .country-selector, [class*="flag"], ' +
+        '[class*="country-code"], [class*="countryCode"], ' +
+        '[class*="dial-code"], [class*="dialCode"]'
+      );
+      if (hasFlagSibling) return true;
+    }
+    return false;
+  }
+
+  /**
+   * Strip a leading country code (+1, +44, etc.) from a phone string.
+   * Returns the local portion, digits/spaces/dashes/parens only.
+   */
+  function stripCountryCode(phone) {
+    const stripped = phone.replace(/^\+\d{1,3}[\s\-.(]?/, '').trim();
+    return stripped || phone;
+  }
+
   function fill(input, value) {
+    // Focus first so React's synthetic event system is primed
+    input.focus();
+
     const proto = input.tagName === 'TEXTAREA'
       ? window.HTMLTextAreaElement.prototype
       : window.HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
-    if (setter) setter.call(input, value);
-    else input.value = value;
+
+    // For phone library inputs, clear existing value and use insertText
+    if (isPhoneLibraryInput(input)) {
+      const localNumber = stripCountryCode(value);
+      // Select all existing content then replace via execCommand
+      input.select?.();
+      const inserted = document.execCommand('insertText', false, localNumber);
+      if (!inserted) {
+        // execCommand not available — use setter + events
+        if (setter) setter.call(input, localNumber);
+        else input.value = localNumber;
+      }
+    } else {
+      if (setter) setter.call(input, value);
+      else input.value = value;
+    }
+
     ['input', 'change', 'blur'].forEach(e =>
       input.dispatchEvent(new Event(e, { bubbles: true }))
     );
