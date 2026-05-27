@@ -127,11 +127,11 @@ if (!window.__careerDogGreenhouse) {
     let description = '';
 
     const descEl = document.querySelector(
-      '#content, ' +                            // standard Greenhouse container
-      '[id*="job_description"], ' +             // legacy variant
-      '[class*="job-description__body"], ' +
-      '[class*="description__body"], ' +
-      '[data-testid*="description"]'
+      '[class*="job__description"], ' +         // new board (job-boards.greenhouse.io)
+      '#content, ' +                            // legacy board (boards.greenhouse.io)
+      '[id*="job_description"], ' +
+      '[class*="job-description"], ' +
+      '[class*="description__body"]'
     );
 
     if (descEl) {
