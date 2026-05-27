@@ -93,7 +93,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
           if (!res || res.error) return setStatus('homeStatus', 'Could not read job.', true);
 
           // Tab-separated → pastes into 3 adjacent cells in Google Sheets
-          const text = [res.title, res.company, res.url].join('\t');
+          const text = [res.company, res.title, res.url].join('\t');
 
           navigator.clipboard.writeText(text)
             .then(() => setStatus('homeStatus', 'Job saved to clipboard!'))

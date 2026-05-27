@@ -99,39 +99,76 @@ if (!window.__careerDogLinkedIn) {
   async function extractJob() {
     LOG('── extractJob ──', location.href);
 
-    // ── Title + Company ─────────────────────────────────────────────────────
-    // og:title is server-rendered and reliable regardless of login state or
-    // CSS obfuscation. Format: "Company hiring Job in Location | LinkedIn"
-    const ogRaw = document.querySelector('meta[property="og:title"]')?.content
-               || document.title
-               || '';
-    LOG('og:title raw:', ogRaw);
+    // ── Job ID + canonical URL ───────────────────────────────────────────────
+    // On direct job page : /jobs/view/1234/  → ID from pathname
+    // On search/collections: /jobs/search/?currentJobId=1234 → ID from query
+    let jobId = location.pathname.match(/\/jobs\/view\/(\d+)/)?.[1]
+             || new URLSearchParams(location.search).get('currentJobId');
 
-    const { title, company } = parseLinkedInMeta(ogRaw);
-    LOG('Parsed → title:', title, '| company:', company);
+    const jobUrl = jobId
+      ? `${location.origin}/jobs/view/${jobId}/`
+      : location.origin + location.pathname;
+
+    LOG('jobId:', jobId, '| jobUrl:', jobUrl);
+
+    // ── Title + Company ──────────────────────────────────────────────────────
+    let title = '', company = '';
+    const onDirectPage = location.pathname.includes('/jobs/view/');
+
+    // Strategy 1 – Job card link (search/collections panel view)
+    // On the search page, og:title belongs to the search results, not the job.
+    // The left-panel job card always has an <a href="/jobs/view/{id}"> whose
+    // text content IS the job title — no class names needed.
+    if (jobId && !onDirectPage) {
+      const links = [...document.querySelectorAll(`a[href*="/jobs/view/${jobId}"]`)];
+      const titleLink = links.find(a => {
+        const t = a.textContent.trim();
+        return t.length > 2 && t.length < 200;
+      });
+      if (titleLink) {
+        title = titleLink.textContent.trim();
+        LOG('✅ Title from job card link:', title);
+
+        // Company is usually a leaf-node sibling element inside the same card
+        const card = titleLink.closest('li, article, div[data-job-id], div[data-occludable-job-id]')
+                  || titleLink.parentElement?.parentElement;
+        if (card) {
+          const leaf = [...card.querySelectorAll('span, div')].find(el =>
+            !el.contains(titleLink) &&
+            el.children.length === 0 &&
+            el.textContent.trim().length > 1 &&
+            el.textContent.trim().length < 100
+          );
+          if (leaf) { company = leaf.textContent.trim(); LOG('✅ Company from card:', company); }
+        }
+      }
+    }
+
+    // Strategy 2 – og:title parse (direct job view page, public page, logged-in job view)
+    // og:title format: "Company hiring Job in Location | LinkedIn"
+    if (!title) {
+      const ogRaw = document.querySelector('meta[property="og:title"]')?.content
+                 || document.title || '';
+      LOG('og:title raw:', ogRaw);
+      ({ title, company } = parseLinkedInMeta(ogRaw));
+      LOG('Parsed → title:', title, '| company:', company);
+    }
 
     if (!title) {
       LOG('❌ Could not determine title');
       return Promise.reject('NOT_FOUND');
     }
 
-    // ── Description ─────────────────────────────────────────────────────────
+    // ── Description ──────────────────────────────────────────────────────────
     let description = '';
 
-    // Strategy A (logged-in): find the "About the job" heading, grab content after it
+    // Strategy A – "About the job" heading (logged-in, hashed class names)
     try {
       const aboutHeading = await waitForHeading('About the job', 10000);
-
-      // Walk up until we find a parent that has a sibling with the description.
-      // Typical structures:
-      //   <section><h2>About the job</h2><div>…</div></section>  → h2.nextElementSibling
-      //   <header><h2>…</h2></header><div>…</div>               → header.nextElementSibling
       const descEl =
-        aboutHeading.nextElementSibling                          ||   // sibling of h2
-        aboutHeading.parentElement?.nextElementSibling           ||   // sibling of h2's parent
-        aboutHeading.closest('section, article, [class]')
-          ?.querySelector('div + div, p, ul');                        // first content inside section
-
+        aboutHeading.nextElementSibling ||
+        aboutHeading.parentElement?.nextElementSibling ||
+        aboutHeading.closest('section, article, [class]')?.querySelector('div + div, p, ul');
       if (descEl) {
         description = toText(descEl);
         LOG('✅ Description via "About the job" heading, length:', description.length);
@@ -140,7 +177,7 @@ if (!window.__careerDogLinkedIn) {
       LOG('ℹ️ "About the job" heading not found, trying CSS fallbacks');
     }
 
-    // Strategy B (public page / fallback): CSS class selectors
+    // Strategy B – CSS class selectors (public page)
     if (!description) {
       const descEl = queryFirst([
         '.description__text--rich',
@@ -156,7 +193,7 @@ if (!window.__careerDogLinkedIn) {
       }
     }
 
-    // Strategy C: og:description (short, but better than nothing)
+    // Strategy C – meta description fallback
     if (!description) {
       description =
         document.querySelector('meta[property="og:description"]')?.content?.trim() ||
@@ -164,8 +201,8 @@ if (!window.__careerDogLinkedIn) {
       if (description) LOG('ℹ️ Description via meta tag');
     }
 
-    LOG('── result ──', { title, company, descLen: description.length });
-    return { title, company, description, url: location.origin + location.pathname };
+    LOG('── result ──', { title, company, descLen: description.length, jobUrl });
+    return { title, company, description, url: jobUrl };
   }
 
   // ── Message listener ────────────────────────────────────────────────────────
