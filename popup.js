@@ -74,6 +74,36 @@ document.getElementById('btn-autofill').addEventListener('click', () => {
   });
 });
 
+// ── Home: Save job button ─────────────────────────────────────────────────────
+// Copies: Job Title / Company / URL (no description)
+
+document.getElementById('btn-save').addEventListener('click', () => {
+  chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
+    if (!tab?.url?.includes('linkedin.com/jobs')) {
+      return setStatus('homeStatus', 'Open a LinkedIn jobs page first.', true);
+    }
+
+    setStatus('homeStatus', 'Saving job…');
+
+    chrome.scripting.executeScript(
+      { target: { tabId: tab.id }, files: ['linkedin.js'] },
+      () => {
+        if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
+        chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
+          if (!res || res.error) return setStatus('homeStatus', 'Could not read job.', true);
+
+          // Tab-separated → pastes into 3 adjacent cells in Google Sheets
+          const text = [res.title, res.company, res.url].join('\t');
+
+          navigator.clipboard.writeText(text)
+            .then(() => setStatus('homeStatus', 'Job saved to clipboard!'))
+            .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
+        });
+      }
+    );
+  });
+});
+
 // ── Home: Copy button ─────────────────────────────────────────────────────────
 
 document.getElementById('btn-copy').addEventListener('click', () => {
