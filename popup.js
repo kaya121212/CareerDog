@@ -4,6 +4,19 @@
 
 const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location', 'zipCode', 'address'];
 
+// ── Job source detection ──────────────────────────────────────────────────────
+
+/**
+ * Returns { script, label } for supported job pages, or null for others.
+ *   LinkedIn  → linkedin.js
+ *   Greenhouse → greenhouse.js
+ */
+function getJobSource(url) {
+  if (url?.includes('linkedin.com/jobs')) return { script: 'linkedin.js',   label: 'LinkedIn'    };
+  if (url?.includes('greenhouse.io'))     return { script: 'greenhouse.js', label: 'Greenhouse'  };
+  return null;
+}
+
 // ── Utility ───────────────────────────────────────────────────────────────────
 
 /** Show a brief status message, then fade it out. */
@@ -79,14 +92,15 @@ document.getElementById('btn-autofill').addEventListener('click', () => {
 
 document.getElementById('btn-save').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    if (!tab?.url?.includes('linkedin.com/jobs')) {
-      return setStatus('homeStatus', 'Open a LinkedIn jobs page first.', true);
+    const source = getJobSource(tab?.url);
+    if (!source) {
+      return setStatus('homeStatus', 'Open a LinkedIn or Greenhouse jobs page first.', true);
     }
 
     setStatus('homeStatus', 'Saving job…');
 
     chrome.scripting.executeScript(
-      { target: { tabId: tab.id }, files: ['linkedin.js'] },
+      { target: { tabId: tab.id }, files: [source.script] },
       () => {
         if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
         chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
@@ -108,24 +122,22 @@ document.getElementById('btn-save').addEventListener('click', () => {
 
 document.getElementById('btn-copy').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    // Accept any LinkedIn jobs page:
-    //   /jobs/view/...          (direct job URL)
-    //   /jobs/search/?...       (search panel, logged-in)
-    //   /jobs/collections/...   (saved/recommended, logged-in)
-    if (!tab?.url?.includes('linkedin.com/jobs')) {
-      return setStatus('homeStatus', 'Open a LinkedIn jobs page first.', true);
+    // Accept LinkedIn (/jobs/view, /jobs/search, /jobs/collections) and Greenhouse
+    const source = getJobSource(tab?.url);
+    if (!source) {
+      return setStatus('homeStatus', 'Open a LinkedIn or Greenhouse jobs page first.', true);
     }
 
     setStatus('homeStatus', 'Reading job…');
 
     /**
-     * Always inject linkedin.js first (handles SPA navigation where the
-     * content script was never auto-injected by the manifest), then send
-     * GET_JOB.  The guard in linkedin.js prevents duplicate listener registration.
+     * Always inject the site-specific content script first (handles SPA
+     * navigation where the manifest content script may not have run yet).
+     * The guard in each script prevents duplicate listener registration.
      */
     function requestJob() {
       chrome.scripting.executeScript(
-        { target: { tabId: tab.id }, files: ['linkedin.js'] },
+        { target: { tabId: tab.id }, files: [source.script] },
         () => {
           if (chrome.runtime.lastError) {
             return setStatus('homeStatus', 'Cannot read this page.', true);

@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CareerDog Autofill",
-  "version": "1.4",
+  "version": "2.0",
   "description": "Auto-fills job application forms and copies LinkedIn job details.",
   "permissions": ["storage", "activeTab", "scripting"],
   "action": {
@@ -16,6 +16,14 @@
         "https://www.linkedin.com/jobs/collections/*"
       ],
       "js": ["linkedin.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://job-boards.greenhouse.io/*",
+        "https://boards.greenhouse.io/*"
+      ],
+      "js": ["greenhouse.js"],
       "run_at": "document_idle"
     }
   ],
