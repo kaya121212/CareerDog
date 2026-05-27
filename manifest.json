@@ -1,13 +1,24 @@
 {
   "manifest_version": 3,
   "name": "CareerDog Autofill",
-  "version": "1.0",
-  "description": "Auto-fills name, email, phone, and LinkedIn URL on job application forms.",
+  "version": "1.1",
+  "description": "Auto-fills job application forms and copies LinkedIn job details.",
   "permissions": ["storage", "activeTab", "scripting"],
   "action": {
     "default_popup": "popup.html",
     "default_icon": "icon.png"
   },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://www.linkedin.com/jobs/view/*",
+        "https://www.linkedin.com/jobs/search/*",
+        "https://www.linkedin.com/jobs/collections/*"
+      ],
+      "js": ["linkedin.js"],
+      "run_at": "document_idle"
+    }
+  ],
   "icons": {
     "48": "icon.png"
   }
