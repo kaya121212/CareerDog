@@ -78,15 +78,15 @@ if (!window.__careerDogIndeed) {
     // ── Title ─────────────────────────────────────────────────────────────────
     let title = '';
 
+    // The job title lives in an h2 (not h1) on the search/panel view.
+    // Indeed also appends " - job post" to the text — strip it.
     const titleEl = document.querySelector(
-      '[data-testid="jobsearch-JobInfoHeader-title"], ' +
-      'h1.jobsearch-JobInfoHeader-title, ' +
-      '[class*="JobInfoHeader-title"], ' +
-      '[class*="jobTitle"] h1, ' +
-      'h1'
+      '.jobsearch-JobInfoHeader-title, ' +
+      '[data-testid*="jobsearch-JobInfoHeader-title"], ' +
+      '[class*="JobInfoHeader-title"]'
     );
     if (titleEl) {
-      title = titleEl.textContent.trim();
+      title = titleEl.textContent.trim().replace(/\s*-\s*job post\s*$/i, '').trim();
       LOG('✅ title from DOM:', title);
     }
 
