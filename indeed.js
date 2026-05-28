@@ -132,9 +132,7 @@ if (!window.__careerDogIndeed) {
 
     const descEl = document.querySelector(
       '#jobDescriptionText, ' +               // most stable Indeed selector
-      '[id*="jobDescription"], ' +
       '[class*="jobDescriptionText"], ' +
-      '[class*="jobDescription"], ' +
       '[data-testid="jobDescriptionText"]'
     );
 
