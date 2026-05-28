@@ -33,6 +33,15 @@
       ],
       "js": ["indeed.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.glassdoor.com/job-listing/*",
+        "https://www.glassdoor.com/Jobs/*",
+        "https://www.glassdoor.com/partner/jobListing.htm*"
+      ],
+      "js": ["glassdoor.js"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {

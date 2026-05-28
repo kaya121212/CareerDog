@@ -15,6 +15,7 @@ function getJobSource(url) {
   if (url?.includes('linkedin.com/jobs')) return { script: 'linkedin.js',   label: 'LinkedIn'   };
   if (url?.includes('greenhouse.io'))     return { script: 'greenhouse.js', label: 'Greenhouse' };
   if (url?.includes('indeed.com'))        return { script: 'indeed.js',     label: 'Indeed'     };
+  if (url?.includes('glassdoor.com'))     return { script: 'glassdoor.js',  label: 'Glassdoor'  };
   return null;
 }
 
@@ -95,7 +96,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
     const source = getJobSource(tab?.url);
     if (!source) {
-      return setStatus('homeStatus', 'Open a LinkedIn, Greenhouse, or Indeed jobs page first.', true);
+      return setStatus('homeStatus', 'Open a LinkedIn, Greenhouse, Indeed, or Glassdoor jobs page first.', true);
     }
 
     setStatus('homeStatus', 'Saving job…');
@@ -126,7 +127,7 @@ document.getElementById('btn-copy').addEventListener('click', () => {
     // Accept LinkedIn (/jobs/view, /jobs/search, /jobs/collections) and Greenhouse
     const source = getJobSource(tab?.url);
     if (!source) {
-      return setStatus('homeStatus', 'Open a LinkedIn, Greenhouse, or Indeed jobs page first.', true);
+      return setStatus('homeStatus', 'Open a LinkedIn, Greenhouse, Indeed, or Glassdoor jobs page first.', true);
     }
 
     setStatus('homeStatus', 'Reading job…');
