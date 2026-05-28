@@ -25,6 +25,14 @@
       ],
       "js": ["greenhouse.js"],
       "run_at": "document_idle"
+    },
+    {
+      "matches": [
+        "https://www.indeed.com/viewjob*",
+        "https://www.indeed.com/jobs*"
+      ],
+      "js": ["indeed.js"],
+      "run_at": "document_idle"
     }
   ],
   "icons": {
