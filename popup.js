@@ -322,9 +322,14 @@ function fillPageWithData(userData) {
     for (const input of inputs) {
       if (filled.has(input)) continue;
       if (matches(input, matcher)) {
-        fill(input, value);
-        filled.add(input);
-        count++;
+        if (input.value.trim()) {
+          // Field already has a value — preserve it, mark as handled
+          filled.add(input);
+        } else {
+          fill(input, value);
+          filled.add(input);
+          count++;
+        }
       }
     }
   }
