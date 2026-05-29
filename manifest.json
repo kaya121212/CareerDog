@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CareerDog Autofill",
-  "version": "2.1",
+  "version": "2.2",
   "description": "Auto-fills job application forms and copies LinkedIn job details.",
   "permissions": ["storage", "activeTab", "scripting"],
   "action": {
@@ -15,7 +15,7 @@
         "https://www.linkedin.com/jobs/search/*",
         "https://www.linkedin.com/jobs/collections/*"
       ],
-      "js": ["linkedin.js"],
+      "js": ["shared/utils.js", "sites/linkedin.js"],
       "run_at": "document_idle"
     },
     {
@@ -23,7 +23,7 @@
         "https://job-boards.greenhouse.io/*",
         "https://boards.greenhouse.io/*"
       ],
-      "js": ["greenhouse.js"],
+      "js": ["shared/utils.js", "sites/greenhouse.js"],
       "run_at": "document_idle"
     },
     {
@@ -31,16 +31,17 @@
         "https://www.indeed.com/viewjob*",
         "https://www.indeed.com/jobs*"
       ],
-      "js": ["indeed.js"],
+      "js": ["shared/utils.js", "sites/indeed.js"],
       "run_at": "document_idle"
     },
     {
       "matches": [
+        "https://www.glassdoor.com/Job/*",
         "https://www.glassdoor.com/job-listing/*",
         "https://www.glassdoor.com/Jobs/*",
         "https://www.glassdoor.com/partner/jobListing.htm*"
       ],
-      "js": ["glassdoor.js"],
+      "js": ["shared/utils.js", "sites/glassdoor.js"],
       "run_at": "document_idle"
     }
   ],

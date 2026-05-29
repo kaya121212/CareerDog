@@ -7,15 +7,15 @@ const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location
 // ── Job source detection ──────────────────────────────────────────────────────
 
 /**
- * Returns { script, label } for supported job pages, or null for others.
- *   LinkedIn  → linkedin.js
- *   Greenhouse → greenhouse.js
+ * Returns { files, label } for supported job pages, or null for others.
+ * `files` is injected via scripting.executeScript in order:
+ *   shared/utils.js first (sets up CareerDog.*), then the site extractor.
  */
 function getJobSource(url) {
-  if (url?.includes('linkedin.com/jobs')) return { script: 'linkedin.js',   label: 'LinkedIn'   };
-  if (url?.includes('greenhouse.io'))     return { script: 'greenhouse.js', label: 'Greenhouse' };
-  if (url?.includes('indeed.com'))        return { script: 'indeed.js',     label: 'Indeed'     };
-  if (url?.includes('glassdoor.com'))     return { script: 'glassdoor.js',  label: 'Glassdoor'  };
+  if (url?.includes('linkedin.com/jobs'))  return { files: ['shared/utils.js', 'sites/linkedin.js'],   label: 'LinkedIn'   };
+  if (url?.includes('greenhouse.io'))       return { files: ['shared/utils.js', 'sites/greenhouse.js'], label: 'Greenhouse' };
+  if (url?.includes('indeed.com'))          return { files: ['shared/utils.js', 'sites/indeed.js'],     label: 'Indeed'     };
+  if (url?.includes('glassdoor.com'))       return { files: ['shared/utils.js', 'sites/glassdoor.js'],  label: 'Glassdoor'  };
   return null;
 }
 
@@ -46,12 +46,8 @@ backBtn.addEventListener('click', () => showPage('home'));
 // ── Detect LinkedIn on load ───────────────────────────────────────────────────
 
 chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-  const isLinkedIn = tab?.url?.includes('linkedin.com') ?? false;
-
-  if (isLinkedIn) {
-    // Autofill is not useful on LinkedIn (no job application form)
-    const autofillBtn = document.getElementById('btn-autofill');
-    autofillBtn.disabled = true;
+  if (tab?.url?.includes('linkedin.com')) {
+    document.getElementById('btn-autofill').disabled = true;
     document.getElementById('autofillHint').style.display = 'block';
   }
 });
@@ -59,7 +55,6 @@ chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
 // ── Home: Profile button ──────────────────────────────────────────────────────
 
 document.getElementById('btn-profile').addEventListener('click', () => {
-  // Load saved values before showing the page
   chrome.storage.sync.get(FIELDS, data => {
     FIELDS.forEach(id => {
       const el = document.getElementById(id);
@@ -75,7 +70,6 @@ document.getElementById('btn-autofill').addEventListener('click', () => {
   chrome.storage.sync.get(FIELDS, data => {
     chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
       chrome.scripting.executeScript(
-        // allFrames: true catches forms embedded inside iframes (e.g. Ashby)
         { target: { tabId: tab.id, allFrames: true }, func: fillPageWithData, args: [data] },
         results => {
           if (chrome.runtime.lastError) {
@@ -90,7 +84,7 @@ document.getElementById('btn-autofill').addEventListener('click', () => {
 });
 
 // ── Home: Save job button ─────────────────────────────────────────────────────
-// Copies: Job Title / Company / URL (no description)
+// Copies: Company [tab] Title [tab] URL  (pastes into 3 Google Sheets cells)
 
 document.getElementById('btn-save').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
@@ -102,15 +96,12 @@ document.getElementById('btn-save').addEventListener('click', () => {
     setStatus('homeStatus', 'Saving job…');
 
     chrome.scripting.executeScript(
-      { target: { tabId: tab.id }, files: [source.script] },
+      { target: { tabId: tab.id }, files: source.files },
       () => {
         if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
         chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
           if (!res || res.error) return setStatus('homeStatus', 'Could not read job.', true);
-
-          // Tab-separated → pastes into 3 adjacent cells in Google Sheets
           const text = [res.company, res.title, res.url].join('\t');
-
           navigator.clipboard.writeText(text)
             .then(() => setStatus('homeStatus', 'Job saved to clipboard!'))
             .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
@@ -121,10 +112,10 @@ document.getElementById('btn-save').addEventListener('click', () => {
 });
 
 // ── Home: Copy button ─────────────────────────────────────────────────────────
+// Copies: Job Title / Company / Description
 
 document.getElementById('btn-copy').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
-    // Accept LinkedIn (/jobs/view, /jobs/search, /jobs/collections) and Greenhouse
     const source = getJobSource(tab?.url);
     if (!source) {
       return setStatus('homeStatus', 'Open a LinkedIn, Greenhouse, Indeed, or Glassdoor jobs page first.', true);
@@ -132,46 +123,34 @@ document.getElementById('btn-copy').addEventListener('click', () => {
 
     setStatus('homeStatus', 'Reading job…');
 
-    /**
-     * Always inject the site-specific content script first (handles SPA
-     * navigation where the manifest content script may not have run yet).
-     * The guard in each script prevents duplicate listener registration.
-     */
-    function requestJob() {
-      chrome.scripting.executeScript(
-        { target: { tabId: tab.id }, files: [source.script] },
-        () => {
-          if (chrome.runtime.lastError) {
-            return setStatus('homeStatus', 'Cannot read this page.', true);
-          }
-          chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, handleJob);
+    chrome.scripting.executeScript(
+      { target: { tabId: tab.id }, files: source.files },
+      () => {
+        if (chrome.runtime.lastError) {
+          return setStatus('homeStatus', 'Cannot read this page.', true);
         }
-      );
-    }
+        chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
+          if (!res || res.error) {
+            const MSG = {
+              NOT_FOUND      : 'Could not find job details. Try refreshing the page.',
+              EXTRACT_FAILED : 'Could not read page. Try refreshing the page.',
+            };
+            return setStatus('homeStatus', MSG[res?.error] || 'Could not read job.', true);
+          }
 
-    function handleJob(res) {
-      if (!res || res.error) {
-        const MSG = {
-          NOT_FOUND      : 'Could not find job details. Try refreshing the page.',
-          EXTRACT_FAILED : 'Could not read page. Try refreshing the page.',
-        };
-        return setStatus('homeStatus', MSG[res?.error] || 'Could not read job.', true);
+          const text = [
+            `Job Title: ${res.title}`,
+            `Company: ${res.company}`,
+            '',
+            res.description,
+          ].join('\n').trim();
+
+          navigator.clipboard.writeText(text)
+            .then(() => setStatus('homeStatus', 'Copied to clipboard!'))
+            .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
+        });
       }
-
-      const { title, company, description } = res;
-      const text = [
-        `Job Title: ${title}`,
-        `Company: ${company}`,
-        '',
-        description,
-      ].join('\n').trim();
-
-      navigator.clipboard.writeText(text)
-        .then(() => setStatus('homeStatus', 'Copied to clipboard!'))
-        .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
-    }
-
-    requestJob();
+    );
   });
 });
 
@@ -188,16 +167,10 @@ document.getElementById('saveBtn').addEventListener('click', () => {
 
 // ═════════════════════════════════════════════════════════════════════════════
 // INJECTED FUNCTION  (runs inside the target page – must be self-contained)
-// LinkedIn job extraction now lives in linkedin.js (content script).
+// Fills visible form inputs using heuristic label/attribute matching.
+// Handles React/Vue state via native value setters + synthetic events.
 // ═════════════════════════════════════════════════════════════════════════════
 
-/**
- * Fills visible form inputs using heuristic label/attribute matching.
- * Handles React/Vue state by using native value setters + synthetic events.
- *
- * @param {Object} userData  Profile fields from chrome.storage.sync
- * @returns {number}         Number of fields filled
- */
 function fillPageWithData(userData) {
   const fullName = [userData.firstName, userData.lastName].filter(Boolean).join(' ');
   const resolved = { ...userData, fullName };
@@ -227,17 +200,14 @@ function fillPageWithData(userData) {
       input.getAttribute('autocomplete'),
     ].map(norm);
 
-    // <label for="id">
     if (input.id) {
       try {
         const lbl = document.querySelector(`label[for="${CSS.escape(input.id)}"]`);
         if (lbl) candidates.push(norm(lbl.textContent));
       } catch (_) {}
     }
-    // Wrapping <label>
     const wl = input.closest('label');
     if (wl) candidates.push(norm(wl.textContent));
-    // Nearest label in parent container
     const container = input.closest('div, li, section, fieldset, p');
     if (container) {
       const lbl = container.querySelector('label, [class*="label"], [class*="Label"]');
@@ -247,18 +217,12 @@ function fillPageWithData(userData) {
     return matcher.keys.some(k => candidates.some(c => c.includes(norm(k))));
   }
 
-  /**
-   * Returns true if the input is the number-only field inside a phone-library
-   * widget (react-tel-input, react-international-phone, intl-tel-input, etc.)
-   * that already shows a country-code selector/flag.
-   */
   function isPhoneLibraryInput(input) {
     const container = input.closest(
       '.react-tel-input, .react-international-phone, .intl-tel-input, ' +
       '[class*="PhoneInput"], [class*="phone-input"], [class*="phoneInput"]'
     );
     if (container) return true;
-    // Look for a sibling/nearby flag or country selector
     const parent = input.parentElement;
     if (parent) {
       const hasFlagSibling = parent.querySelector(
@@ -271,32 +235,22 @@ function fillPageWithData(userData) {
     return false;
   }
 
-  /**
-   * Strip a leading country code (+1, +44, etc.) from a phone string.
-   * Returns the local portion, digits/spaces/dashes/parens only.
-   */
   function stripCountryCode(phone) {
-    const stripped = phone.replace(/^\+\d{1,3}[\s\-.(]?/, '').trim();
-    return stripped || phone;
+    return phone.replace(/^\+\d{1,3}[\s\-.(]?/, '').trim() || phone;
   }
 
   function fill(input, value) {
-    // Focus first so React's synthetic event system is primed
     input.focus();
-
     const proto = input.tagName === 'TEXTAREA'
       ? window.HTMLTextAreaElement.prototype
       : window.HTMLInputElement.prototype;
     const setter = Object.getOwnPropertyDescriptor(proto, 'value')?.set;
 
-    // For phone library inputs, clear existing value and use insertText
     if (isPhoneLibraryInput(input)) {
       const localNumber = stripCountryCode(value);
-      // Select all existing content then replace via execCommand
       input.select?.();
       const inserted = document.execCommand('insertText', false, localNumber);
       if (!inserted) {
-        // execCommand not available — use setter + events
         if (setter) setter.call(input, localNumber);
         else input.value = localNumber;
       }
@@ -325,7 +279,6 @@ function fillPageWithData(userData) {
       if (filled.has(input)) continue;
       if (matches(input, matcher)) {
         if (input.value.trim()) {
-          // Field already has a value — preserve it, mark as handled
           filled.add(input);
         } else {
           fill(input, value);
