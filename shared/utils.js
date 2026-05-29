@@ -50,8 +50,10 @@ CareerDog.toText = function toText(el) {
 CareerDog.register = function register(guardKey, extractFn, site) {
   const LOG = (...a) => console.log(`[CareerDog ${site}]`, ...a);
 
-  // Remove any previously registered handler so re-injection always gets a
-  // fresh listener (avoids the guard blocking re-registration after SPA nav).
+  // Always expose extractJob so popup can call it directly via executeScript.
+  CareerDog.extractJob = extractFn;
+
+  // Remove any previously registered handler before adding a fresh one.
   if (window[guardKey + '_handler']) {
     chrome.runtime.onMessage.removeListener(window[guardKey + '_handler']);
   }

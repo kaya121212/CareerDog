@@ -84,7 +84,7 @@ document.getElementById('btn-autofill').addEventListener('click', () => {
 });
 
 // ── Home: Save job button ─────────────────────────────────────────────────────
-// Copies: Company [tab] Title [tab] URL [tab] platform (pastes into 4 Google Sheets cells)
+// Copies tab-separated: Date, Email, Company, Title, URL, Platform, Location, Salary, Recruiter
 
 document.getElementById('btn-save').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
@@ -95,19 +95,34 @@ document.getElementById('btn-save').addEventListener('click', () => {
 
     setStatus('homeStatus', 'Saving job…');
 
-    chrome.scripting.executeScript(
-      { target: { tabId: tab.id }, files: source.files },
-      () => {
-        if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
-        chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
-          if (!res || res.error) return setStatus('homeStatus', 'Could not read job.', true);
-          const text = [res.company, res.title, res.url, source.platform].join('\t');
+    chrome.storage.sync.get(['email'], (data) => {
+      const email = data.email || 'unknown';
+      const date = new Date().toISOString().slice(0, 10);
+
+      chrome.scripting.executeScript(
+        { target: { tabId: tab.id }, func: extractJobData },
+        results => {
+          if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
+          const res = results?.[0]?.result;
+          if (!res) return setStatus('homeStatus', 'Could not read job.', true);
+          const text = [
+            email,
+            date,
+            res.company,
+            res.title,
+            res.url,
+            source.platform,
+            res.location  || '',
+            res.salary    || '',
+            'Applied',
+            res.recruiter || '',
+          ].join('\t');
           navigator.clipboard.writeText(text)
             .then(() => setStatus('homeStatus', 'Job saved to clipboard!'))
             .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
-        });
-      }
-    );
+        }
+      );
+    });
   });
 });
 
@@ -124,27 +139,20 @@ document.getElementById('btn-copy').addEventListener('click', () => {
     setStatus('homeStatus', 'Reading job…');
 
     chrome.scripting.executeScript(
-      { target: { tabId: tab.id }, files: source.files },
-      () => {
+      { target: { tabId: tab.id }, func: extractJobData },
+      results => {
         if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
-        chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
-          if (chrome.runtime.lastError || !res || res.error) {
-            const MSG = {
-              NOT_FOUND      : 'Could not find job details. Try refreshing the page.',
-              EXTRACT_FAILED : 'Could not read page. Try refreshing the page.',
-            };
-            return setStatus('homeStatus', MSG[res?.error] || 'Could not read job.', true);
-          }
-          const text = [
-            `Job Title: ${res.title}`,
-            `Company: ${res.company}`,
-            '',
-            res.description,
-          ].join('\n').trim();
-          navigator.clipboard.writeText(text)
-            .then(() => setStatus('homeStatus', 'Copied to clipboard!'))
-            .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
-        });
+        const res = results?.[0]?.result;
+        if (!res) return setStatus('homeStatus', 'Could not read job.', true);
+        const text = [
+          `Job Title: ${res.title}`,
+          `Company: ${res.company}`,
+          '',
+          res.description,
+        ].join('\n').trim();
+        navigator.clipboard.writeText(text)
+          .then(() => setStatus('homeStatus', 'Copied to clipboard!'))
+          .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
       }
     );
   });
@@ -166,6 +174,115 @@ document.getElementById('saveBtn').addEventListener('click', () => {
 // Fills visible form inputs using heuristic label/attribute matching.
 // Handles React/Vue state via native value setters + synthetic events.
 // ═════════════════════════════════════════════════════════════════════════════
+
+// ═════════════════════════════════════════════════════════════════════════════
+// INJECTED FUNCTION – extractJobData
+// Runs inside the target page. Fully self-contained (no external dependencies).
+// Returns { title, company, url, description, location, salary, recruiter }
+// ═════════════════════════════════════════════════════════════════════════════
+
+function extractJobData() {
+  function queryFirst(selectors) {
+    for (const sel of selectors) {
+      try { const el = document.querySelector(sel); if (el?.textContent.trim()) return el; } catch (_) {}
+    }
+    return null;
+  }
+
+  function toText(el) {
+    if (!el) return '';
+    const clone = el.cloneNode(true);
+    clone.querySelectorAll('[aria-hidden="true"], button, svg, img, style, script').forEach(n => n.remove());
+    clone.querySelectorAll('p, div, br, h1, h2, h3, h4, h5').forEach(n => n.after(document.createTextNode('\n')));
+    clone.querySelectorAll('li').forEach(n => { n.prepend(document.createTextNode('• ')); n.after(document.createTextNode('\n')); });
+    return clone.textContent.split('\n').map(l => l.trim())
+      .reduce((a, l) => { if (l === '' && a[a.length - 1] === '') return a; a.push(l); return a; }, [])
+      .join('\n').trim();
+  }
+
+  // ── Job ID & URL ────────────────────────────────────────────────────────────
+  let jobId = location.pathname.match(/\/jobs\/view\/(\d+)/)?.[1]
+           || new URLSearchParams(location.search).get('currentJobId');
+  if (!jobId) {
+    const card = document.querySelector('[data-job-id], [data-occludable-job-id]');
+    jobId = card?.dataset.jobId || card?.dataset.occludableJobId
+         || card?.querySelector('a[href*="/jobs/view/"]')?.href.match(/\/jobs\/view\/(\d+)/)?.[1];
+  }
+  const jobUrl = jobId ? `${location.origin}/jobs/view/${jobId}/` : location.href;
+  const onDirectPage = location.pathname.includes('/jobs/view/');
+
+  // ── Title ───────────────────────────────────────────────────────────────────
+  let title = '';
+  if (!onDirectPage && jobId) {
+    const a = document.querySelector(`a[href*="/jobs/view/${jobId}"]`);
+    const t = a?.textContent.trim();
+    if (t && t.length > 2 && t.length < 200) title = t;
+  }
+  if (!title && onDirectPage) title = document.querySelector('h1')?.textContent.trim() || '';
+  if (!title) {
+    const raw = document.querySelector('meta[property="og:title"]')?.content || document.title || '';
+    const s = raw.replace(/\s*\|\s*LinkedIn\s*$/i, '').trim();
+    const m = s.match(/^(.+?)\s+at\s+(.+)$/i) || s.match(/^(.+?)\s+hiring\s+(.+?)(?:\s+in\s+.+)?$/i);
+    const t2 = m ? (m[0].includes(' at ') ? m[1] : m[2]).trim() : s.split(/\s*\|\s*/)[0].trim();
+    if (t2 && t2.toLowerCase() !== 'linkedin' && t2.toLowerCase() !== 'jobs') title = t2;
+  }
+
+  // ── Company ─────────────────────────────────────────────────────────────────
+  let company = '';
+  const compEl = queryFirst([
+    '.job-details-jobs-unified-top-card__company-name a',
+    '.jobs-unified-top-card__company-name a',
+    '.topcard__org-name-link',
+    '[class*="company-name"] a',
+    '[class*="companyName"] a',
+    'a[href*="/company/"]',
+  ]);
+  if (compEl) company = compEl.textContent.trim();
+
+  // ── Description ─────────────────────────────────────────────────────────────
+  const descEl = queryFirst([
+    '#job-details',
+    '.jobs-description__content',
+    '.jobs-description-content__text',
+    '.description__text--rich',
+    '[class*="jobs-description__content"]',
+    '[class*="job-description"]',
+  ]);
+  const description = toText(descEl);
+
+  // ── Location ────────────────────────────────────────────────────────────────
+  const locEl = queryFirst([
+    '.job-details-jobs-unified-top-card__bullet',
+    '.jobs-unified-top-card__bullet',
+    '.topcard__flavor--bullet',
+    '[class*="top-card"][class*="location"]',
+  ]);
+  const location2 = locEl?.textContent.trim() || '';
+
+  // ── Salary ──────────────────────────────────────────────────────────────────
+  // Look for a button text that contains a currency symbol or pay pattern
+  let salary = '';
+  const fitBtns = document.querySelectorAll('.job-details-fit-level-preferences button strong');
+  for (const el of fitBtns) {
+    const t = el.textContent.trim();
+    if (/\$|£|€|¥|\/hr|\/yr|k\b|salary|per hour|per year/i.test(t)) { salary = t; break; }
+  }
+  if (!salary) {
+    const salEl = queryFirst(['[class*="salary"]', '[class*="compensation"]', '[data-test*="salary"]']);
+    salary = salEl?.textContent.trim() || '';
+  }
+
+  // ── Recruiter ───────────────────────────────────────────────────────────────
+  const recEl = queryFirst([
+    '.hirer-card__hirer-information a',
+    '[class*="hirer-card"] a',
+    '[class*="hiring-team"] a',
+  ]);
+  const recruiter = recEl?.textContent.trim() || '';
+
+  if (!title) return null;
+  return { title, company, url: jobUrl, description, location: location2, salary, recruiter };
+}
 
 function fillPageWithData(userData) {
   const fullName = [userData.firstName, userData.lastName].filter(Boolean).join(' ');

@@ -85,9 +85,27 @@
     LOG('── extractJob ──', location.href);
 
     // ── Canonical URL ────────────────────────────────────────────────────────
-    const jobId =
+    // 1. Direct view page  /jobs/view/1234/
+    // 2. Search/collections query param  ?currentJobId=1234
+    // 3. DOM fallback: active job card attribute (covers /jobs/search with no query param)
+    let jobId =
       location.pathname.match(/\/jobs\/view\/(\d+)/)?.[1] ||
       new URLSearchParams(location.search).get('currentJobId');
+
+    if (!jobId) {
+      const activeCard = document.querySelector(
+        '[data-job-id], [data-occludable-job-id], ' +
+        '[class*="job-card"][class*="active"], [class*="job-card"][aria-selected="true"], ' +
+        '.job-card-container--active, .jobs-search-results-list__list-item--active'
+      );
+      if (activeCard) {
+        jobId = activeCard.dataset.jobId || activeCard.dataset.occludableJobId ||
+                activeCard.getAttribute('data-job-id') ||
+                activeCard.querySelector('a[href*="/jobs/view/"]')
+                  ?.href.match(/\/jobs\/view\/(\d+)/)?.[1];
+      }
+    }
+
     const jobUrl = jobId
       ? `${location.origin}/jobs/view/${jobId}/`
       : location.origin + location.pathname;
@@ -213,8 +231,50 @@
       if (description) LOG('ℹ️ description from meta');
     }
 
-    LOG('── result ──', { title, company, descLen: description.length });
-    return { title, company, description, url: jobUrl };
+    // ── Location ─────────────────────────────────────────────────────────────
+    let location = '';
+    const locationEl = queryFirst([
+      '.job-details-jobs-unified-top-card__bullet',
+      '.jobs-unified-top-card__bullet',
+      '.topcard__flavor--bullet',
+      '[class*="top-card"] [class*="bullet"]',
+      '[class*="topCard"] [class*="location"]',
+      '[class*="job-details"] [class*="workplace"]',
+    ]);
+    if (locationEl) {
+      location = locationEl.textContent.trim();
+      LOG('✅ location:', location);
+    }
+
+    // ── Salary ───────────────────────────────────────────────────────────────
+    let salary = '';
+    const salaryEl = queryFirst([
+      '.job-details-jobs-unified-top-card__job-insight [class*="salary"]',
+      '[class*="salary"]',
+      '[class*="compensation"]',
+      '[data-test*="salary"]',
+    ]);
+    if (salaryEl) {
+      salary = salaryEl.textContent.trim();
+      LOG('✅ salary:', salary);
+    }
+
+    // ── Recruiter ────────────────────────────────────────────────────────────
+    let recruiter = '';
+    const recruiterEl = queryFirst([
+      '.hirer-card__hirer-information a',
+      '[class*="hirer-card"] a',
+      '[class*="recruiter"] a',
+      '[class*="hiring-team"] a',
+      '[class*="message-the-recruiter"] [class*="name"]',
+    ]);
+    if (recruiterEl) {
+      recruiter = recruiterEl.textContent.trim();
+      LOG('✅ recruiter:', recruiter);
+    }
+
+    LOG('── result ──', { title, company, location, salary, recruiter, descLen: description.length });
+    return { title, company, description, url: jobUrl, location, salary, recruiter };
   }
 
   CareerDog.register('__careerDogLinkedIn', extractJob, 'LinkedIn');
