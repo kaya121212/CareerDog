@@ -12,10 +12,10 @@ const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location
  *   shared/utils.js first (sets up CareerDog.*), then the site extractor.
  */
 function getJobSource(url) {
-  if (url?.includes('linkedin.com/jobs'))  return { files: ['shared/utils.js', 'sites/linkedin.js'],   label: 'LinkedIn'   };
-  if (url?.includes('greenhouse.io'))       return { files: ['shared/utils.js', 'sites/greenhouse.js'], label: 'Greenhouse' };
-  if (url?.includes('indeed.com'))          return { files: ['shared/utils.js', 'sites/indeed.js'],     label: 'Indeed'     };
-  if (url?.includes('glassdoor.com'))       return { files: ['shared/utils.js', 'sites/glassdoor.js'],  label: 'Glassdoor'  };
+  if (url?.includes('linkedin.com/jobs'))  return { files: ['shared/utils.js', 'sites/linkedin.js'],   label: 'LinkedIn',   platform: 'LinkedIn.com'   };
+  if (url?.includes('greenhouse.io'))       return { files: ['shared/utils.js', 'sites/greenhouse.js'], label: 'Greenhouse', platform: 'Greenhouse.io'  };
+  if (url?.includes('indeed.com'))          return { files: ['shared/utils.js', 'sites/indeed.js'],     label: 'Indeed',     platform: 'Indeed.com'     };
+  if (url?.includes('glassdoor.com'))       return { files: ['shared/utils.js', 'sites/glassdoor.js'],  label: 'Glassdoor',  platform: 'Glassdoor.com'  };
   return null;
 }
 
@@ -84,7 +84,7 @@ document.getElementById('btn-autofill').addEventListener('click', () => {
 });
 
 // ── Home: Save job button ─────────────────────────────────────────────────────
-// Copies: Company [tab] Title [tab] URL  (pastes into 3 Google Sheets cells)
+// Copies: Company [tab] Title [tab] URL [tab] platform (pastes into 4 Google Sheets cells)
 
 document.getElementById('btn-save').addEventListener('click', () => {
   chrome.tabs.query({ active: true, currentWindow: true }, ([tab]) => {
@@ -101,7 +101,7 @@ document.getElementById('btn-save').addEventListener('click', () => {
         if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
         chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
           if (!res || res.error) return setStatus('homeStatus', 'Could not read job.', true);
-          const text = [res.company, res.title, res.url].join('\t');
+          const text = [res.company, res.title, res.url, source.platform].join('\t');
           navigator.clipboard.writeText(text)
             .then(() => setStatus('homeStatus', 'Job saved to clipboard!'))
             .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
@@ -126,25 +126,21 @@ document.getElementById('btn-copy').addEventListener('click', () => {
     chrome.scripting.executeScript(
       { target: { tabId: tab.id }, files: source.files },
       () => {
-        if (chrome.runtime.lastError) {
-          return setStatus('homeStatus', 'Cannot read this page.', true);
-        }
+        if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
         chrome.tabs.sendMessage(tab.id, { type: 'GET_JOB' }, res => {
-          if (!res || res.error) {
+          if (chrome.runtime.lastError || !res || res.error) {
             const MSG = {
               NOT_FOUND      : 'Could not find job details. Try refreshing the page.',
               EXTRACT_FAILED : 'Could not read page. Try refreshing the page.',
             };
             return setStatus('homeStatus', MSG[res?.error] || 'Could not read job.', true);
           }
-
           const text = [
             `Job Title: ${res.title}`,
             `Company: ${res.company}`,
             '',
             res.description,
           ].join('\n').trim();
-
           navigator.clipboard.writeText(text)
             .then(() => setStatus('homeStatus', 'Copied to clipboard!'))
             .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));

@@ -48,23 +48,29 @@ CareerDog.toText = function toText(el) {
  * @param {string}   site      short name shown in console logs
  */
 CareerDog.register = function register(guardKey, extractFn, site) {
-  if (window[guardKey]) return;
-  window[guardKey] = true;
-
   const LOG = (...a) => console.log(`[CareerDog ${site}]`, ...a);
 
-  chrome.runtime.onMessage.addListener((req, _sender, sendResponse) => {
+  // Remove any previously registered handler so re-injection always gets a
+  // fresh listener (avoids the guard blocking re-registration after SPA nav).
+  if (window[guardKey + '_handler']) {
+    chrome.runtime.onMessage.removeListener(window[guardKey + '_handler']);
+  }
+
+  const handler = (req, _sender, sendResponse) => {
     if (req.type !== 'GET_JOB') return;
     LOG('GET_JOB received');
-    Promise.resolve()
-      .then(extractFn)
+    extractFn()
       .then(sendResponse)
       .catch(err => {
         LOG('❌ error:', err);
         sendResponse({ error: err === 'NOT_FOUND' ? 'NOT_FOUND' : 'EXTRACT_FAILED' });
       });
     return true;
-  });
+  };
+
+  window[guardKey + '_handler'] = handler;
+  window[guardKey] = true;
+  chrome.runtime.onMessage.addListener(handler);
 
   LOG('loaded on', location.href);
 };
