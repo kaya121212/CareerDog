@@ -263,16 +263,13 @@ function extractJobData() {
   const location2 = locEl?.textContent.trim() || '';
 
   // ── Salary ──────────────────────────────────────────────────────────────────
-  // Look for a button text that contains a currency symbol or pay pattern
+  // Only read from the fit-level preference buttons (e.g. "$50/hr - $60/hr").
+  // Avoid #SALARY / jobs-details__salary-main-rail-card which shows benefits, not pay.
   let salary = '';
   const fitBtns = document.querySelectorAll('.job-details-fit-level-preferences button strong');
   for (const el of fitBtns) {
     const t = el.textContent.trim();
-    if (/\$|£|€|¥|\/hr|\/yr|k\b|salary|per hour|per year/i.test(t)) { salary = t; break; }
-  }
-  if (!salary) {
-    const salEl = queryFirst(['[class*="salary"]', '[class*="compensation"]', '[data-test*="salary"]']);
-    salary = salEl?.textContent.trim() || '';
+    if (/\$|£|€|¥|\/hr|\/yr|k\b|per hour|per year/i.test(t)) { salary = t; break; }
   }
 
   // ── Recruiter ───────────────────────────────────────────────────────────────
