@@ -230,6 +230,8 @@ function extractJobData() {
   // ── Company ─────────────────────────────────────────────────────────────────
   let company = '';
   const compEl = queryFirst([
+    '[data-testid="job-details-company-url"]',
+    '[data-testid="inlineCompanyName"]',
     '.job-details-jobs-unified-top-card__company-name a',
     '.jobs-unified-top-card__company-name a',
     '.topcard__org-name-link',
@@ -241,6 +243,7 @@ function extractJobData() {
 
   // ── Description ─────────────────────────────────────────────────────────────
   const descEl = queryFirst([
+    '[data-testid="expandable-text-box"]',
     '#job-details',
     '.jobs-description__content',
     '.jobs-description-content__text',
