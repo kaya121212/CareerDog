@@ -247,7 +247,10 @@
     }
 
     // ── Salary ───────────────────────────────────────────────────────────────
+    // LinkedIn renders salary as a pill/chip whose text matches a dollar pattern.
+    // Class names are obfuscated hashes so we scan by text content instead.
     let salary = '';
+    const salaryPattern = /\$[\d,]+[KkMm]?(?:\/(?:yr|hr|mo))?(?:\s*[-–]\s*\$[\d,]+[KkMm]?(?:\/(?:yr|hr|mo))?)?/;
     const salaryEl = queryFirst([
       '.job-details-jobs-unified-top-card__job-insight [class*="salary"]',
       '[class*="salary"]',
@@ -256,10 +259,31 @@
     ]);
     if (salaryEl) {
       salary = salaryEl.textContent.trim();
-      LOG('✅ salary:', salary);
+      LOG('✅ salary (CSS):', salary);
+    }
+    if (!salary) {
+      // Walk all leaf spans/anchors for a salary-shaped text
+      const allEls = [...document.querySelectorAll('a span, span, li')];
+      const match = allEls.find(el =>
+        el.children.length === 0 && salaryPattern.test(el.textContent.trim())
+      );
+      if (match) {
+        salary = match.textContent.trim().match(salaryPattern)?.[0] || '';
+        LOG('✅ salary (DOM scan):', salary);
+      }
+    }
+    if (!salary) {
+      // Last resort: scan the full visible text of the page
+      const pageText = document.body.innerText || '';
+      const m = pageText.match(/\$[\d,]+[KkMm](?:\/(?:yr|hr|mo))?(?:\s*[-–]\s*\$[\d,]+[KkMm](?:\/(?:yr|hr|mo))?)?/);
+      if (m) {
+        salary = m[0];
+        LOG('✅ salary (innerText scan):', salary);
+      }
     }
 
     // ── Recruiter ────────────────────────────────────────────────────────────
+    // Strategy 1: stable CSS selectors (older LinkedIn layouts)
     let recruiter = '';
     const recruiterEl = queryFirst([
       '.hirer-card__hirer-information a',
@@ -270,7 +294,26 @@
     ]);
     if (recruiterEl) {
       recruiter = recruiterEl.textContent.trim();
-      LOG('✅ recruiter:', recruiter);
+      LOG('✅ recruiter (CSS):', recruiter);
+    }
+    // Strategy 2: find "Meet the hiring team" text node, then grab the /in/ profile link
+    if (!recruiter) {
+      const headingEl = [...document.querySelectorAll('p, h2, h3, span')]
+        .find(el => el.textContent.trim().toLowerCase() === 'meet the hiring team');
+      if (headingEl) {
+        const section =
+          headingEl.closest('div, section') ||
+          headingEl.parentElement?.parentElement;
+        if (section) {
+          const profileLink = section.querySelector('a[href*="/in/"]');
+          if (profileLink) {
+            // Prefer the visible name text, not the full inner HTML
+            const nameEl = profileLink.querySelector('a[href*="/in/"]') || profileLink;
+            recruiter = nameEl.textContent.replace(/\s+/g, ' ').trim();
+            LOG('✅ recruiter (heading scan):', recruiter);
+          }
+        }
+      }
     }
 
     LOG('── result ──', { title, company, location, salary, recruiter, descLen: description.length });

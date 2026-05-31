@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.7] – 2026-05-31
+### Fixed
+- LinkedIn salary extraction: added DOM leaf-span scan and `innerText` regex fallback to handle obfuscated class names
+- LinkedIn recruiter extraction: added "Meet the hiring team" heading scan + `/in/` profile link strategy to replace broken legacy CSS selectors
+
 ## [2.6] – 2026-05-31
 ### Added
 - Google Sheets integration: configure a Google Apps Script URL in Profile to POST job data directly to a Sheet
