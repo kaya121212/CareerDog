@@ -2,7 +2,7 @@
 // CareerDog – popup.js
 // ─────────────────────────────────────────────────────────────────────────────
 
-const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location', 'zipCode', 'address'];
+const FIELDS = ['firstName', 'lastName', 'email', 'phone', 'linkedin', 'location', 'zipCode', 'address', 'scriptUrl'];
 
 // ── Job source detection ──────────────────────────────────────────────────────
 
@@ -95,9 +95,10 @@ document.getElementById('btn-save').addEventListener('click', () => {
 
     setStatus('homeStatus', 'Saving job…');
 
-    chrome.storage.sync.get(['email'], (data) => {
-      const email = data.email || 'unknown';
-      const date = new Date().toISOString().slice(0, 10);
+    chrome.storage.sync.get(['email', 'scriptUrl'], (data) => {
+      const email     = data.email     || 'unknown';
+      const scriptUrl = data.scriptUrl || '';
+      const date      = new Date().toISOString().slice(0, 10);
 
       chrome.scripting.executeScript(
         { target: { tabId: tab.id }, func: extractJobData },
@@ -105,21 +106,37 @@ document.getElementById('btn-save').addEventListener('click', () => {
           if (chrome.runtime.lastError) return setStatus('homeStatus', 'Cannot read this page.', true);
           const res = results?.[0]?.result;
           if (!res) return setStatus('homeStatus', 'Could not read job.', true);
-          const text = [
+
+          const row = {
             email,
             date,
-            res.company,
-            res.title,
-            res.url,
-            source.platform,
-            res.location  || '',
-            res.salary    || '',
-            'Applied',
-            res.recruiter || '',
-          ].join('\t');
-          navigator.clipboard.writeText(text)
-            .then(() => setStatus('homeStatus', 'Job saved to clipboard!'))
-            .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
+            company  : res.company,
+            title    : res.title,
+            url      : res.url,
+            platform : source.platform,
+            location : res.location  || '',
+            salary   : res.salary    || '',
+            status   : 'Applied',
+            recruiter: res.recruiter || '',
+          };
+
+          if (scriptUrl) {
+            // POST to Google Apps Script → Google Sheet
+            fetch(scriptUrl, {
+              method : 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body   : JSON.stringify(row),
+            })
+              .then(r => r.json())
+              .then(r => setStatus('homeStatus', r.success ? '✅ Saved to Sheet!' : '❌ Sheet error: ' + r.error, !r.success))
+              .catch(() => setStatus('homeStatus', '❌ Could not reach Google Sheet.', true));
+          } else {
+            // Fallback: copy to clipboard if no script URL configured
+            const text = Object.values(row).join('\t');
+            navigator.clipboard.writeText(text)
+              .then(() => setStatus('homeStatus', 'Copied! (Set Script URL in Profile to save to Sheet)'))
+              .catch(() => setStatus('homeStatus', 'Clipboard write failed.', true));
+          }
         }
       );
     });
