@@ -1,5 +1,13 @@
 # Changelog
 
+## [2.6] – 2026-05-31
+### Added
+- Google Sheets integration: configure a Google Apps Script URL in Profile to POST job data directly to a Sheet
+- `scriptUrl` field added to profile settings
+- `host_permissions` for `script.google.com` in manifest
+### Changed
+- Save falls back to clipboard copy when no Script URL is configured, with a hint to set it up
+
 ## [2.2] – 2026-05-28
 ### Changed
 - Refactored all site extractors into `sites/` folder
